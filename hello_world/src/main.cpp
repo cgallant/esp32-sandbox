@@ -15,7 +15,7 @@ void loop() {
   neopixelWrite(LED_PIN, 50, 0, 0);
   delay(1000);
   
-  Serial.println("Green");
+  Serial.println("Green YES");
   neopixelWrite(LED_PIN, 0, 50, 0);
   delay(1000);
   
