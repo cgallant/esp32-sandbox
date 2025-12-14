@@ -3,67 +3,76 @@
 #include <Ethernet.h>
 
 // ---------------- W5500 PINS (ESP32-S3 DevKitC-1) ----------------
-#define W5500_CS   10
-#define W5500_RST  14
+#define W5500_CS 10
+#define W5500_RST 14
 #define W5500_MOSI 11
 #define W5500_MISO 13
-#define W5500_SCK  12
+#define W5500_SCK 12
 
 // ---------------- NETWORK ----------------
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
 IPAddress espIP(192, 168, 1, 177);
-IPAddress macServer(192, 168, 1, 152);   // your Mac IP (server machine)
+IPAddress macServer(192, 168, 1, 152); // your Mac IP (server machine)
 
 // ---------------- CLIENTS ----------------
-EthernetClient c1;   // connects to macServer:5001
-EthernetClient c2;   // connects to macServer:5002
+EthernetClient c1; // connects to macServer:5001
+EthernetClient c2; // connects to macServer:5002
 
 // ---------------- PER-CLIENT STATE ----------------
-struct TcpClientState {
-  EthernetClient* client;
-  const char*     name;
-  uint16_t        port;
+struct TcpClientState
+{
+  EthernetClient *client;
+  const char *name;
+  uint16_t port;
 
-  bool            everConnected;
-  unsigned long   lastTryMs;
-  unsigned long   lastHbMs;
+  bool everConnected;
+  bool isConnected; // added this to fix shared port bug **
+  unsigned long lastTryMs;
+  unsigned long lastHbMs;
 
   // non-blocking line buffer
   static const size_t BUFSZ = 160;
-  char           buf[BUFSZ];
-  size_t         len;
+  char buf[BUFSZ];
+  size_t len;
 };
 
-TcpClientState s1;   // will be set in setup()
-TcpClientState s2;   // will be set in setup()
+TcpClientState s1; // will be set in setup()
+TcpClientState s2; // will be set in setup()
 
-const unsigned long RETRY_MS = 1000;   // try connect every 1s (fast feedback)
-const unsigned long HB_MS    = 500;    // heartbeat every 0.5s (adjust later)
+const unsigned long RETRY_MS = 1000; // try connect every 1s (fast feedback)
+const unsigned long HB_MS = 500;     // heartbeat every 0.5s (adjust later)
 
-static void initState(TcpClientState &s, EthernetClient &c, const char* name, uint16_t port) {
+static void initState(TcpClientState &s, EthernetClient &c, const char *name, uint16_t port)
+{
   s.client = &c;
-  s.name   = name;
-  s.port   = port;
+  s.name = name;
+  s.port = port;
   s.everConnected = false;
+  s.isConnected = false; // Added this to deal with double port bug
   s.lastTryMs = 0;
-  s.lastHbMs  = 0;
+  s.lastHbMs = 0;
   s.len = 0;
   memset(s.buf, 0, sizeof(s.buf));
 }
 
-static void pumpRxNonBlocking(TcpClientState &s) {
+static void pumpRxNonBlocking(TcpClientState &s)
+{
   EthernetClient &cli = *s.client;
 
-  while (cli.available() > 0) {
+  while (cli.available() > 0)
+  {
     int ch = cli.read();
-    if (ch < 0) break;
+    if (ch < 0)
+      break;
 
     char c = (char)ch;
 
     // treat \n as end-of-line; ignore \r
-    if (c == '\r') continue;
+    if (c == '\r')
+      continue;
 
-    if (c == '\n') {
+    if (c == '\n')
+    {
       // complete line in s.buf[0..len-1]
       s.buf[s.len] = '\0';
       Serial.print("[");
@@ -75,21 +84,31 @@ static void pumpRxNonBlocking(TcpClientState &s) {
     }
 
     // append if room, else drop line to avoid wedging
-    if (s.len < TcpClientState::BUFSZ - 1) {
+    if (s.len < TcpClientState::BUFSZ - 1)
+    {
       s.buf[s.len++] = c;
-    } else {
+    }
+    else
+    {
       // overflow: reset buffer (drop current line)
       s.len = 0;
     }
   }
 }
 
-static void serviceOneClient(TcpClientState &s, unsigned long now) {
+static void serviceOneClient(TcpClientState &s, unsigned long now)
+{
   EthernetClient &cli = *s.client;
 
-  // connection state
-  if (!cli.connected()) {
-    if (s.everConnected) {
+  // Use OUR flag, not cli.connected()
+  if (!s.isConnected)
+  {
+    Serial.print("[");
+    Serial.print(s.name);
+    Serial.println("] NOT connected");
+
+    if (s.everConnected)
+    {
       Serial.print("[");
       Serial.print(s.name);
       Serial.println("] disconnected");
@@ -97,25 +116,38 @@ static void serviceOneClient(TcpClientState &s, unsigned long now) {
     }
 
     // attempt reconnect on timer
-    if (now - s.lastTryMs >= RETRY_MS) {
+    if (now - s.lastTryMs >= RETRY_MS)
+    {
       s.lastTryMs = now;
       Serial.print("[");
       Serial.print(s.name);
       Serial.print("] connecting... ");
 
-      if (cli.connect(macServer, s.port)) {
-        Serial.println("SUCCESS");
+      if (cli.connect(macServer, s.port))
+      {
+        Serial.print("SUCCESS on port ");
+        Serial.println(s.port);
         s.everConnected = true;
+        s.isConnected = true; // ⬅️ SET OUR FLAG
         s.len = 0;
 
         // identify which socket
         cli.print("HELLO");
         cli.print(s.port == 5001 ? "1" : "2");
         cli.println(",PANEL");
-      } else {
+      }
+      else
+      {
         Serial.println("FAILED");
       }
     }
+    return;
+  }
+
+  // Check if connection was lost (use library function here for actual socket state)
+  if (!cli.connected())
+  {
+    s.isConnected = false; // ⬅️ CLEAR OUR FLAG
     return;
   }
 
@@ -123,23 +155,28 @@ static void serviceOneClient(TcpClientState &s, unsigned long now) {
   pumpRxNonBlocking(s);
 
   // heartbeat (timer-based)
-  if (now - s.lastHbMs >= HB_MS) {
+  if (now - s.lastHbMs >= HB_MS)
+  {
     s.lastHbMs = now;
     Serial.print("[");
     Serial.print(s.name);
     Serial.print("] TX: ");
 
-    if (s.port == 5001) {
+    if (s.port == 5001)
+    {
       cli.println("HEARTBEAT1,PANEL");
       Serial.println("HEARTBEAT1,PANEL");
-    } else {
+    }
+    else
+    {
       cli.println("HEARTBEAT2,PANEL");
       Serial.println("HEARTBEAT2,PANEL");
     }
   }
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
   delay(7000);
 
@@ -157,6 +194,9 @@ void setup() {
   Ethernet.init(W5500_CS);
   Ethernet.begin(mac, espIP);
   delay(500);
+  // Force each client to use a different hardware socket
+  c1 = EthernetClient(0); // Use socket 0
+  c2 = EthernetClient(1); // Use socket 1
 
   Serial.print("IP: ");
   Serial.println(Ethernet.localIP());
@@ -171,7 +211,8 @@ void setup() {
   Serial.println("  5001 and 5002");
 }
 
-void loop() {
+void loop()
+{
   unsigned long now = millis();
 
   // keep lease alive if you ever switch to DHCP later (harmless for static)
