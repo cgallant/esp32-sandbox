@@ -7,7 +7,7 @@ Adafruit_MCP23X17 mcp2;
 void setup() {
   Serial.begin(115200);
   delay(5000);
-  Serial.println("MCP23017 Two-Chip Button Test");
+  Serial.println("MCP23017 One-Chip Button Test");
 
   if (!mcp1.begin_I2C(0x20)) {
     Serial.println("MCP23017 #1 (0x20) not found!");
@@ -15,31 +15,20 @@ void setup() {
   }
   Serial.println("MCP23017 #1 (0x20) found!");
 
-  if (!mcp2.begin_I2C(0x21)) {
-    Serial.println("MCP23017 #2 (0x21) not found!");
-    while (1);
-  }
-  Serial.println("MCP23017 #2 (0x21) found!");
-
   // Configure GPA0-GPA7 as inputs with pull-ups on both chips
   for (int i = 0; i < 8; i++) {
     mcp1.pinMode(i, INPUT_PULLUP);
     mcp2.pinMode(i, INPUT_PULLUP);
-    Serial.println("pins pulled up");
   }
 }
 
 void loop() {
   Serial.print("Chip1: ");
-  for (int i = 0; i < 8; i++) {
+  for (int i = 6; i < 8; i++) {
     Serial.print(mcp1.digitalRead(i));
     Serial.print(" ");
-  }
-  Serial.print("  Chip2: ");
-  for (int i = 0; i < 8; i++) {
-    Serial.print(mcp2.digitalRead(i));
-    Serial.print(" ");
+
   }
   Serial.println();
-  delay(200);
+  //delay(200);
 }
