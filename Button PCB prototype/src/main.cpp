@@ -40,47 +40,57 @@ const uint8_t MCP_ADDRESSES[] = {0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26};
 Adafruit_MCP23X17 mcp[NUM_MCPS];
 
 // TLC5947 setup
-#define TLC_LAT   15
-#define TLC_CLK   38
-#define TLC_DIN   39
-#define NUM_TLC   1
+#define TLC_LAT 15
+#define TLC_CLK 38
+#define TLC_DIN 39
+#define NUM_TLC 1
 
 Adafruit_TLC5947 tlc = Adafruit_TLC5947(NUM_TLC, TLC_CLK, TLC_DIN, TLC_LAT);
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
   delay(5000);
   Serial.println("MCP23017 Seven-Chip Button Test with TLC5947");
 
   Wire.begin(8, 9);
-  delay(100);  // Let I2C bus settle
+  delay(100); // Let I2C bus settle
 
   // Initialize all MCP23017 chips
-  for (int chip = 0; chip < NUM_MCPS; chip++) {
-    if (!mcp[chip].begin_I2C(MCP_ADDRESSES[chip], &Wire)) {
+  for (int chip = 0; chip < NUM_MCPS; chip++)
+  {
+    if (!mcp[chip].begin_I2C(MCP_ADDRESSES[chip], &Wire))
+    {
       Serial.printf("MCP23017 #%d (0x%02X) not found!\n", chip + 1, MCP_ADDRESSES[chip]);
-      while (1);
+      while (1)
+        ;
     }
     Serial.printf("MCP23017 #%d (0x%02X) found!\n", chip + 1, MCP_ADDRESSES[chip]);
 
     // Configure GPA0-GPA7 as inputs with pull-ups
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 8; i++)
+    {
       mcp[chip].pinMode(i, INPUT_PULLUP);
     }
   }
 
+  pinMode(48, OUTPUT);
+  digitalWrite(48, LOW);
+
   // Initialize TLC5947
   tlc.begin();
-  for (int i = 0; i < 24 * NUM_TLC; i++) {
+  for (int i = 0; i < 24 * NUM_TLC; i++)
+  {
     tlc.setPWM(i, 0);
   }
   tlc.write();
   Serial.println("TLC5947 initialized!");
 }
 
-void loop() {
+void loop()
+{
   // Read buttons on Chip 1
-  bool gpa7_pressed = !mcp[0].digitalRead(7);  // Active low
+  bool gpa7_pressed = !mcp[0].digitalRead(7); // Active low
   bool gpa6_pressed = !mcp[0].digitalRead(6);
 
   // Control LEDs
@@ -89,9 +99,11 @@ void loop() {
   tlc.write();
 
   // Print all chip states
-  for (int chip = 0; chip < NUM_MCPS; chip++) {
+  for (int chip = 0; chip < NUM_MCPS; chip++)
+  {
     Serial.printf("Chip%d: ", chip + 1);
-    for (int i = 6; i < 8; i++) {
+    for (int i = 6; i < 8; i++)
+    {
       Serial.print(mcp[chip].digitalRead(i));
       Serial.print(" ");
     }
